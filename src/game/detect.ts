@@ -6,10 +6,20 @@ const HEIGHT = 320;
 const BAND = 0.22;
 const MATCH_MIN = 0.52;
 const MARGIN_MIN = 0.035;
+/** Mean luminance 0–255. Below this the frame is treated as too dark to read. */
+const DARK_MAX = 48;
+
+export type ScoreRow = { type: BadgeType; score: number };
 
 export type DetectResult =
-  | { ok: true; type: BadgeType; score: number }
-  | { ok: false; reason: "low" | "ambiguous" | "empty"; closest?: { type: BadgeType; score: number } };
+  | { ok: true; type: BadgeType; score: number; scores: ScoreRow[]; brightness: number }
+  | {
+      ok: false;
+      reason: "low" | "ambiguous" | "empty" | "dark";
+      closest?: ScoreRow;
+      scores: ScoreRow[];
+      brightness: number;
+    };
 
 type Template = { id: BadgeType; pixels: Float32Array };
 
@@ -46,6 +56,19 @@ function ncc(a: Float32Array, b: Float32Array): number {
   }
   const den = Math.sqrt(denA * denB);
   return den === 0 ? 0 : num / den;
+}
+
+function meanLuma(canvas: HTMLCanvasElement): number {
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx || canvas.width === 0 || canvas.height === 0) return 0;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = data.length / 4;
+  let sum = 0;
+  for (let i = 0; i < pixels; i += 1) {
+    const j = i * 4;
+    sum += 0.299 * data[j] + 0.587 * data[j + 1] + 0.114 * data[j + 2];
+  }
+  return sum / pixels;
 }
 
 function roleBand(canvas: HTMLCanvasElement): Float32Array {
@@ -115,22 +138,27 @@ export function cropVideoFrame(video: HTMLVideoElement, frame: HTMLElement): HTM
 }
 
 export async function classifyCanvas(canvas: HTMLCanvasElement): Promise<DetectResult> {
+  const brightness = meanLuma(canvas);
   const sample = roleBand(canvas);
-  if (sample.length === 0) return { ok: false, reason: "empty" };
+  if (sample.length === 0) return { ok: false, reason: "empty", scores: [], brightness };
 
   const loaded = await ensureTemplates();
-  const ranked = loaded
+  const scores = loaded
     .map((template) => ({ type: template.id, score: ncc(sample, template.pixels) }))
     .sort((a, b) => b.score - a.score);
 
-  const best = ranked[0];
-  const second = ranked[1];
-  if (!best) return { ok: false, reason: "empty" };
-  if (best.score < MATCH_MIN) return { ok: false, reason: "low", closest: best };
-  if (second && best.score - second.score < MARGIN_MIN) {
-    return { ok: false, reason: "ambiguous", closest: best };
+  if (brightness < DARK_MAX) {
+    return { ok: false, reason: "dark", scores, brightness, closest: scores[0] };
   }
-  return { ok: true, type: best.type, score: best.score };
+
+  const best = scores[0];
+  const second = scores[1];
+  if (!best) return { ok: false, reason: "empty", scores, brightness };
+  if (best.score < MATCH_MIN) return { ok: false, reason: "low", closest: best, scores, brightness };
+  if (second && best.score - second.score < MARGIN_MIN) {
+    return { ok: false, reason: "ambiguous", closest: best, scores, brightness };
+  }
+  return { ok: true, type: best.type, score: best.score, scores, brightness };
 }
 
 export async function classifyImageFile(file: File): Promise<{ canvas: HTMLCanvasElement; result: DetectResult }> {

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { HOURLY_CAP } from "../game/constants";
+import { BADGES, HOURLY_CAP } from "../game/constants";
 import {
   classifyCanvas,
   classifyImageFile,
   cropVideoFrame,
   selfCheck,
   type DetectResult,
+  type ScoreRow,
 } from "../game/detect";
 import {
   cooldownRemaining,
@@ -44,6 +45,7 @@ export function Scanner({
   const [camError, setCamError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [lowLight, setLowLight] = useState(false);
+  const [scores, setScores] = useState<ScoreRow[] | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [check, setCheck] = useState<string | null>(null);
   const insecure = typeof window !== "undefined" && !window.isSecureContext;
@@ -90,12 +92,18 @@ export function Scanner({
 
   async function handleResult(canvas: HTMLCanvasElement, result: DetectResult) {
     setPreview(canvas.toDataURL("image/jpeg", 0.7));
+    if (!result.ok && result.reason === "dark") {
+      setScores(null);
+      setLowLight(true);
+      return;
+    }
+    setLowLight(false);
     if (result.ok) {
-      setLowLight(false);
+      setScores(null);
       onPick(result.type);
       return;
     }
-    setLowLight(true);
+    setScores(result.scores);
   }
 
   async function capture() {
@@ -112,6 +120,7 @@ export function Scanner({
     }
     setBusy(true);
     setLowLight(false);
+    setScores(null);
     try {
       const canvas = cropVideoFrame(video, frame);
       const result = await classifyCanvas(canvas);
@@ -125,6 +134,7 @@ export function Scanner({
     if (!file || blocked || busy) return;
     setBusy(true);
     setLowLight(false);
+    setScores(null);
     try {
       const { canvas, result } = await classifyImageFile(file);
       await handleResult(canvas, result);
@@ -171,8 +181,28 @@ export function Scanner({
               <p>Move somewhere there is light, then scan the pass again.</p>
             </div>
           ) : null}
+          {scores && scores.length > 0 ? (
+            <div className="score-overlay" role="status" aria-label="Match scores">
+              <strong>Match scores</strong>
+              <ul>
+                {scores.map((row) => {
+                  const badge = BADGES.find((item) => item.id === row.type);
+                  const width = Math.round(Math.max(0, Math.min(1, row.score)) * 100);
+                  return (
+                    <li key={row.type}>
+                      <span>{badge?.label ?? row.type}</span>
+                      <span className="score-track">
+                        <span className="score-fill" style={{ width: `${width}%` }} />
+                      </span>
+                      <span className="score-num">{row.score.toFixed(2)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
         </div>
-        {preview && lowLight ? <img className="scan-preview" src={preview} alt="Last capture" /> : null}
+        {preview && (lowLight || scores) ? <img className="scan-preview" src={preview} alt="Last capture" /> : null}
 
         <button
           type="button"
