@@ -1,0 +1,17 @@
+{
+  "name": "Fantastic",
+  "short_name": "Fantastic",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#140c08",
+  "theme_color": "#FF7900",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
