@@ -6,7 +6,7 @@ import { clearState, loadState, saveState } from "./game/storage";
 import type { BadgeType, GameState, ScanSuccess } from "./game/types";
 import { Home } from "./screens/Home";
 import { Leaderboard } from "./screens/Leaderboard";
-import { Scanner } from "./screens/Scanner";
+import { requestCamera, Scanner } from "./screens/Scanner";
 import { Signup } from "./screens/Signup";
 
 type Screen = "signup" | "home" | "scan" | "board";
@@ -19,6 +19,7 @@ export default function App() {
   const [hit, setHit] = useState<ScanSuccess | null>(null);
   const [pendingLevelUp, setPendingLevelUp] = useState<ScanSuccess | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraRequest, setCameraRequest] = useState<Promise<MediaStream> | null>(null);
 
   useEffect(() => {
     saveState(state);
@@ -66,7 +67,13 @@ export default function App() {
       {screen === "home" ? (
         <Home
           state={state}
-          onScan={() => setScreen("scan")}
+          onScan={() => {
+            const request = requestCamera();
+            request.catch(() => {});
+            setCameraRequest(request);
+            setError(null);
+            setScreen("scan");
+          }}
           onBoard={() => setScreen("board")}
           onReset={reset}
         />
@@ -80,6 +87,7 @@ export default function App() {
           onPick={pick}
           onBack={() => setScreen("home")}
           error={error}
+          cameraRequest={cameraRequest}
         />
       ) : null}
       {hit ? <ScanHit hit={hit} onDone={finishHit} /> : null}

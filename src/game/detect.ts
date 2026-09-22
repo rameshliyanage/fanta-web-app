@@ -187,7 +187,13 @@ export async function selfCheck(): Promise<{ pass: boolean; detail: string }> {
     }),
   );
   const misses = results.filter((row) => !row.result.ok || row.result.type !== row.id);
-  if (misses.length === 0) return { pass: true, detail: "Detector reads all 5 official fronts." };
+  if (misses.length === 0) {
+    return {
+      pass: true,
+      detail:
+        "Hold your camera and capture the full Participant Badge clearly. Make sure to have decent, proper lighting for the capture to work.",
+    };
+  }
   return {
     pass: false,
     detail: misses

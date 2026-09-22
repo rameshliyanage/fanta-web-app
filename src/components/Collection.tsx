@@ -15,7 +15,13 @@ export function Collection({ collected }: { collected: BadgeType[] }) {
           const got = collected.includes(badge.id);
           return (
             <article key={badge.id} className={got ? "got" : "locked"}>
-              <img src={badge.image} alt={badge.label} />
+              {got ? (
+                <img src={badge.image} alt={badge.label} />
+              ) : (
+                <div className="mystery" aria-hidden="true">
+                  <b>?</b>
+                </div>
+              )}
               <span>{got ? badge.label : "???"}</span>
             </article>
           );

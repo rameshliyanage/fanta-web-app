@@ -56,15 +56,18 @@ export function Home({
         </p>
       )}
 
-      <button type="button" className="scan-cta" onClick={onScan} disabled={blocked}>
-        {remaining > 0 ? `Wait ${formatMs(remaining)}` : "Scan a lanyard"}
-      </button>
-      <button type="button" className="secondary" onClick={onBoard}>
-        Leaderboard
-      </button>
-      <button type="button" className="text-btn" onClick={onReset}>
-        Start over
-      </button>
+      <div className="home-actions">
+        <button type="button" className="scan-cta" onClick={onScan} disabled={blocked}>
+          {remaining > 0 ? `Wait ${formatMs(remaining)}` : "Scan a Participant Badge"}
+        </button>
+        <button type="button" className="secondary" onClick={onBoard}>
+          Leaderboard
+        </button>
+        {/* Testing only — remove Start over in the final build. */}
+        <button type="button" className="text-btn" onClick={onReset}>
+          Start over
+        </button>
+      </div>
     </div>
   );
 }
