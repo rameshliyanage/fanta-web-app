@@ -18,6 +18,7 @@ export default function App() {
   );
   const [hit, setHit] = useState<ScanSuccess | null>(null);
   const [pendingLevelUp, setPendingLevelUp] = useState<ScanSuccess | null>(null);
+  const [freshBadge, setFreshBadge] = useState<BadgeType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cameraRequest, setCameraRequest] = useState<Promise<MediaStream> | null>(null);
 
@@ -36,6 +37,7 @@ export default function App() {
     setState(fresh);
     setHit(null);
     setPendingLevelUp(null);
+    setFreshBadge(null);
     setError(null);
     setScreen("signup");
   }
@@ -56,46 +58,64 @@ export default function App() {
   }
 
   function finishHit() {
-    if (hit?.leveledUp) setPendingLevelUp(hit);
+    if (hit?.leveledUp) {
+      setPendingLevelUp(hit);
+    } else if (hit?.isFirst) {
+      setFreshBadge(hit.type);
+    }
     setHit(null);
     setScreen("home");
   }
 
+  function finishLevel() {
+    if (pendingLevelUp?.isFirst) setFreshBadge(pendingLevelUp.type);
+    setPendingLevelUp(null);
+  }
+
+  useEffect(() => {
+    if (!freshBadge) return;
+    const timer = window.setTimeout(() => setFreshBadge(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [freshBadge]);
+
   return (
     <div className="shell">
-      {screen === "signup" ? <Signup onStart={start} /> : null}
-      {screen === "home" ? (
-        <Home
-          state={state}
-          onScan={() => {
-            const request = requestCamera();
-            request.catch(() => {});
-            setCameraRequest(request);
-            setError(null);
-            setScreen("scan");
-          }}
-          onBoard={() => setScreen("board")}
-          onReset={reset}
-        />
-      ) : null}
-      {screen === "board" ? (
-        <Leaderboard state={state} onBack={() => setScreen("home")} />
-      ) : null}
-      {screen === "scan" ? (
-        <Scanner
-          state={state}
-          onPick={pick}
-          onBack={() => setScreen("home")}
-          error={error}
-          cameraRequest={cameraRequest}
-        />
-      ) : null}
+      <div key={screen} className="stage">
+        {screen === "signup" ? <Signup onStart={start} /> : null}
+        {screen === "home" ? (
+          <Home
+            state={state}
+            onScan={() => {
+              const request = requestCamera();
+              request.catch(() => {});
+              setCameraRequest(request);
+              setError(null);
+              setScreen("scan");
+            }}
+            onBoard={() => setScreen("board")}
+            onReset={reset}
+            freshBadge={freshBadge}
+          />
+        ) : null}
+        {screen === "board" ? (
+          <Leaderboard state={state} onBack={() => setScreen("home")} />
+        ) : null}
+        {screen === "scan" ? (
+          <Scanner
+            state={state}
+            onPick={pick}
+            onBack={() => setScreen("home")}
+            error={error}
+            cameraRequest={cameraRequest}
+          />
+        ) : null}
+      </div>
       {hit ? <ScanHit hit={hit} onDone={finishHit} /> : null}
       {pendingLevelUp && !hit ? (
         <LevelUp
           from={pendingLevelUp.fromLevel}
           to={pendingLevelUp.toLevel}
-          onDone={() => setPendingLevelUp(null)}
+          onDone={finishLevel}
         />
       ) : null}
     </div>

@@ -16,8 +16,7 @@ export function Signup({ onStart }: { onStart: (name: string) => void }) {
       <FantaMark size="lg" />
       <h1>Fantastic</h1>
       <p className="lede">
-        Scan Digital Summit Asia lanyards, collect every pass type, and fill the
-        Fantastic bar.
+        Scan Digital Summit Asia participant badges and fill the Fanta-istic bar!
       </p>
       <form onSubmit={handleSubmit}>
         <label htmlFor="player-name">Your name</label>

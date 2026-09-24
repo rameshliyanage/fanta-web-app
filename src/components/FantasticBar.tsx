@@ -4,9 +4,9 @@ export function FantasticBar({ points }: { points: number }) {
   const bar = getBar(points);
 
   return (
-    <section className="fantastic-bar" aria-label="Fantastic bar">
+    <section className="fantastic-bar" aria-label="Fanta-istic bar">
       <div className="bar-meta">
-        <strong>Fantastic bar</strong>
+        <strong>Fanta-istic bar</strong>
         {bar.isMax ? (
           <span>MAX</span>
         ) : (

@@ -8,6 +8,7 @@ import {
   type DetectResult,
   type ScoreRow,
 } from "../game/detect";
+import { preloadOcr } from "../game/ocr";
 import {
   cooldownRemaining,
   formatMs,
@@ -96,6 +97,7 @@ export function Scanner({
   }, []);
 
   useEffect(() => {
+    preloadOcr();
     void selfCheck().then((result) => setCheck(result.detail));
   }, []);
 
@@ -258,6 +260,7 @@ export function Scanner({
           ) : null}
         </div>
 
+        <div className="cam-dock">
         <button
           type="button"
           className="scan-cta"
@@ -291,6 +294,7 @@ export function Scanner({
           />
         </label>
         {check ? <p className="fine">{check}</p> : null}
+        </div>
       </div>
     </div>
   );

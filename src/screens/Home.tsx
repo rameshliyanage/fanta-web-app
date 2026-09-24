@@ -8,7 +8,7 @@ import {
   getBar,
   scansThisHour,
 } from "../game/scoring";
-import type { GameState } from "../game/types";
+import type { BadgeType, GameState } from "../game/types";
 import { useNow } from "../hooks";
 
 export function Home({
@@ -16,11 +16,13 @@ export function Home({
   onScan,
   onBoard,
   onReset,
+  freshBadge = null,
 }: {
   state: GameState;
   onScan: () => void;
   onBoard: () => void;
   onReset: () => void;
+  freshBadge?: BadgeType | null;
 }) {
   const wait = cooldownRemaining(state);
   const now = useNow(wait > 0);
@@ -32,23 +34,23 @@ export function Home({
   return (
     <div className="screen home">
       <header>
-        <FantaMark size="sm" />
-        <div>
-          <p className="hello">Hey {state.name}</p>
-          <h1>{bar.current.name}</h1>
-        </div>
-        <div className="score-chip" aria-label={`${state.points} points`}>
-          <strong>{state.points}</strong>
-          <span>pts</span>
+        <FantaMark size="sm" align="left" />
+        <div className="home-id">
+          <div>
+            <p className="hello">Hey {state.name}</p>
+            <h1>{bar.current.name}</h1>
+          </div>
+          <div className="score-chip" aria-label={`${state.points} points`}>
+            <strong>{state.points}</strong>
+            <span>pts</span>
+          </div>
         </div>
       </header>
 
       <FantasticBar points={state.points} />
-      <Collection collected={state.collected} />
+      <Collection collected={state.collected} freshId={freshBadge} />
 
-      {remaining > 0 ? (
-        <p className="status wait">Fizz cooling · {formatMs(remaining)}</p>
-      ) : hourCount >= HOURLY_CAP ? (
+      {remaining > 0 ? null : hourCount >= HOURLY_CAP ? (
         <p className="status wait">Hourly cap hit · {hourCount}/{HOURLY_CAP}</p>
       ) : (
         <p className="status">
@@ -57,8 +59,15 @@ export function Home({
       )}
 
       <div className="home-actions">
-        <button type="button" className="scan-cta" onClick={onScan} disabled={blocked}>
-          {remaining > 0 ? `Wait ${formatMs(remaining)}` : "Scan a Participant Badge"}
+        <button
+          type="button"
+          className={remaining > 0 ? "scan-cta is-cooling" : "scan-cta"}
+          onClick={onScan}
+          disabled={blocked}
+        >
+          {remaining > 0
+            ? `Cooling your next Fanta move - Wait ${formatMs(remaining)}`
+            : "Scan a Participant Badge"}
         </button>
         <button type="button" className="secondary" onClick={onBoard}>
           Leaderboard
