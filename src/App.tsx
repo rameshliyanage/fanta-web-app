@@ -1,30 +1,54 @@
-import { StrictMode, useEffect, useState } from "react";
-import { LevelUp } from "./components/LevelUp";
-import { ScanHit } from "./components/ScanHit";
+import { StrictMode, useCallback, useEffect, useState } from "react";
+import { Payoff, type PayoffKind } from "./components/Payoff";
+import { loadBoard, previewRank, rankOf } from "./game/board";
+import { buzz, playLevel, playMiss, playPlus, playRank, unlockCues } from "./game/cues";
+import { canvasJpeg } from "./game/detect";
+import { savePhoto } from "./game/photos";
 import { applyScan, emptyState } from "./game/scoring";
 import { clearState, loadState, saveState } from "./game/storage";
-import type { BadgeType, GameState, ScanSuccess } from "./game/types";
+import type { GameState, ScanSuccess } from "./game/types";
+import { Contacts } from "./screens/Contacts";
 import { Home } from "./screens/Home";
+import { HowTo } from "./screens/HowTo";
 import { Leaderboard } from "./screens/Leaderboard";
+import { Profile } from "./screens/Profile";
 import { requestCamera, Scanner } from "./screens/Scanner";
 import { Signup } from "./screens/Signup";
 
-type Screen = "signup" | "home" | "scan" | "board";
+type Screen = "signup" | "home" | "scan" | "board" | "profile" | "collection" | "howto";
+
+type Pending = {
+  kind: PayoffKind;
+  level: number;
+  thenLevel: boolean;
+  rankUp: boolean;
+};
+
+function newPhotoId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `c-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+}
 
 export default function App() {
   const [state, setState] = useState<GameState>(() => loadState());
-  const [screen, setScreen] = useState<Screen>(() =>
-    loadState().name ? "home" : "signup",
-  );
-  const [hit, setHit] = useState<ScanSuccess | null>(null);
-  const [pendingLevelUp, setPendingLevelUp] = useState<ScanSuccess | null>(null);
-  const [freshBadge, setFreshBadge] = useState<BadgeType | null>(null);
+  const [screen, setScreen] = useState<Screen>(() => (loadState().name ? "home" : "signup"));
+  const [payoff, setPayoff] = useState<Pending | null>(null);
+  const [rankPunch, setRankPunch] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cameraRequest, setCameraRequest] = useState<Promise<MediaStream> | null>(null);
+  const [effectsTick, setEffectsTick] = useState(0);
 
   useEffect(() => {
     saveState(state);
   }, [state]);
+
+  useEffect(() => {
+    if (!rankPunch) return;
+    const timer = window.setTimeout(() => setRankPunch(false), 900);
+    return () => window.clearTimeout(timer);
+  }, [rankPunch]);
 
   function start(name: string) {
     setState({ ...emptyState(), name });
@@ -33,50 +57,78 @@ export default function App() {
 
   function reset() {
     clearState();
-    const fresh = loadState();
-    setState(fresh);
-    setHit(null);
-    setPendingLevelUp(null);
-    setFreshBadge(null);
+    setState(loadState());
+    setPayoff(null);
+    setRankPunch(false);
     setError(null);
     setScreen("signup");
   }
 
-  function pick(type: BadgeType) {
-    const result = applyScan(state, type);
-    if (!result.ok) {
-      setError(
-        result.reason === "cooldown"
-          ? "Too soon — wait out the cooldown."
-          : "Hourly cap reached. Take a sip, then scan again.",
-      );
+  function openScan() {
+    unlockCues();
+    const request = requestCamera();
+    request.catch(() => {});
+    setCameraRequest(request);
+    setError(null);
+    setScreen("scan");
+  }
+
+  function showResult(draft: ScanSuccess, rankAfter: number) {
+    const rankUp = draft.isNew && rankAfter < draft.rankBefore;
+    if (draft.isNew) {
+      playPlus();
+      buzz(40);
+      setPayoff({ kind: "plus", level: draft.toLevel.number, thenLevel: draft.leveledUp, rankUp });
       return;
     }
-    setError(null);
-    setState(result.state);
-    setHit(result);
+    playMiss();
+    buzz(12);
+    setPayoff({ kind: "miss", level: draft.fromLevel.number, thenLevel: false, rankUp: false });
   }
 
-  function finishHit() {
-    if (hit?.leveledUp) {
-      setPendingLevelUp(hit);
-    } else if (hit?.isFirst) {
-      setFreshBadge(hit.type);
+  async function accept(canvas: HTMLCanvasElement, code: string) {
+    const rankBefore = rankOf(loadBoard(), state.playerId);
+    const existing = state.collected.find((contact) => contact.code === code);
+    if (existing) {
+      showResult(applyScan(state, code, existing.photoId, "", rankBefore, rankBefore), rankBefore);
+      return;
     }
-    setHit(null);
+    const blob = await canvasJpeg(canvas);
+    const photoId = newPhotoId();
+    await savePhoto(photoId, blob);
+    const draft = applyScan(state, code, photoId, "", rankBefore, rankBefore);
+    const rankAfter = previewRank(draft.state);
+    setState(draft.state);
+    showResult(draft, rankAfter);
+  }
+
+  const finishPayoff = useCallback(() => {
+    if (!payoff) return;
+    if (payoff.kind === "plus" && payoff.thenLevel) {
+      playLevel();
+      buzz([30, 40, 30, 40, 80]);
+      setPayoff({ ...payoff, kind: "level", thenLevel: false });
+      return;
+    }
+    if (payoff.rankUp) {
+      playRank();
+      buzz(25);
+      setRankPunch(true);
+    }
     setScreen("home");
-  }
+    setPayoff(null);
+  }, [payoff]);
 
-  function finishLevel() {
-    if (pendingLevelUp?.isFirst) setFreshBadge(pendingLevelUp.type);
-    setPendingLevelUp(null);
-  }
+  const editContact = useCallback((code: string, name: string, company: string) => {
+    setState((current) => ({
+      ...current,
+      collected: current.collected.map((contact) =>
+        contact.code === code ? { ...contact, name, company } : contact,
+      ),
+    }));
+  }, []);
 
-  useEffect(() => {
-    if (!freshBadge) return;
-    const timer = window.setTimeout(() => setFreshBadge(null), 1600);
-    return () => window.clearTimeout(timer);
-  }, [freshBadge]);
+  const rank = previewRank(state);
 
   return (
     <div className="shell">
@@ -85,39 +137,39 @@ export default function App() {
         {screen === "home" ? (
           <Home
             state={state}
-            onScan={() => {
-              const request = requestCamera();
-              request.catch(() => {});
-              setCameraRequest(request);
-              setError(null);
-              setScreen("scan");
-            }}
+            rank={rank}
+            rankPunch={rankPunch}
+            onScan={openScan}
+            onHowTo={() => setScreen("howto")}
             onBoard={() => setScreen("board")}
-            onReset={reset}
-            freshBadge={freshBadge}
+            onSquad={() => setScreen("collection")}
+            onProfile={() => setScreen("profile")}
           />
         ) : null}
-        {screen === "board" ? (
-          <Leaderboard state={state} onBack={() => setScreen("home")} />
+        {screen === "howto" ? <HowTo onBack={() => setScreen("home")} /> : null}
+        {screen === "board" ? <Leaderboard state={state} onBack={() => setScreen("home")} /> : null}
+        {screen === "profile" ? (
+          <Profile
+            state={state}
+            effectsTick={effectsTick}
+            onEffects={() => setEffectsTick((n) => n + 1)}
+            onBack={() => setScreen("home")}
+            onReset={reset}
+          />
+        ) : null}
+        {screen === "collection" ? (
+          <Contacts state={state} onChange={editContact} onBack={() => setScreen("home")} />
         ) : null}
         {screen === "scan" ? (
           <Scanner
-            state={state}
-            onPick={pick}
+            onAccept={(canvas, code) => void accept(canvas, code)}
             onBack={() => setScreen("home")}
             error={error}
             cameraRequest={cameraRequest}
           />
         ) : null}
       </div>
-      {hit ? <ScanHit hit={hit} onDone={finishHit} /> : null}
-      {pendingLevelUp && !hit ? (
-        <LevelUp
-          from={pendingLevelUp.fromLevel}
-          to={pendingLevelUp.toLevel}
-          onDone={finishLevel}
-        />
-      ) : null}
+      {payoff ? <Payoff kind={payoff.kind} level={payoff.level} onDone={finishPayoff} /> : null}
     </div>
   );
 }

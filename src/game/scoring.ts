@@ -1,18 +1,5 @@
-import {
-  COOLDOWN_MS,
-  FIRST_OF_TYPE_POINTS,
-  HOUR_MS,
-  HOURLY_CAP,
-  LEVELS,
-  REPEAT_POINTS,
-  SCAN_LINES,
-} from "./constants";
-import type {
-  BadgeType,
-  GameState,
-  Level,
-  ScanResult,
-} from "./types";
+import { NEW_PERSON_POINTS, PEOPLE_PER_LEVEL } from "./constants";
+import type { Contact, GameState, Level, ScanSuccess } from "./types";
 
 function newId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -27,104 +14,95 @@ export function emptyState(): GameState {
     name: "",
     points: 0,
     collected: [],
-    lastScanAt: null,
-    scanTimestamps: [],
     lineIndex: 0,
   };
 }
 
-export function getLevel(points: number): Level {
-  let current = LEVELS[0];
-  for (const level of LEVELS) {
-    if (points >= level.min) current = level;
-  }
-  return current;
+export function levelNumber(count: number): number {
+  return 1 + Math.floor(Math.max(0, count) / PEOPLE_PER_LEVEL);
 }
 
-export function getLevelIndex(points: number): number {
-  let index = 0;
-  for (let i = 0; i < LEVELS.length; i += 1) {
-    if (points >= LEVELS[i].min) index = i;
-  }
-  return index;
+export function getLevel(count: number): Level {
+  const number = levelNumber(count);
+  return { number, name: `Level ${number}` };
 }
 
-export function getBar(points: number) {
-  const index = getLevelIndex(points);
-  const current = LEVELS[index];
-  const next = LEVELS[index + 1];
-  if (!next) {
+export function levelWindow(level: number): number[] {
+  const start = level <= 3 ? 1 : level - 2;
+  return [0, 1, 2, 3, 4].map((offset) => start + offset);
+}
+
+export function getSquad(count: number) {
+  const level = levelNumber(count);
+  const bandStart = (level - 1) * PEOPLE_PER_LEVEL;
+  const inBand = count - bandStart;
+  return {
+    level,
+    nextLevel: level + 1,
+    fill: inBand / PEOPLE_PER_LEVEL,
+    scansLeft: PEOPLE_PER_LEVEL - inBand,
+    window: levelWindow(level),
+  };
+}
+
+export function applyScan(
+  state: GameState,
+  code: string,
+  photoId: string,
+  photoUrl: string,
+  rankBefore: number,
+  rankAfter: number,
+  now = Date.now(),
+): ScanSuccess {
+  const existing = state.collected.find((contact) => contact.code === code);
+  const fromLevel = getLevel(state.collected.length);
+  if (existing) {
     return {
-      current,
-      next: null,
-      inBand: 0,
-      need: 0,
-      fill: 1,
-      isMax: true,
+      ok: true,
+      code,
+      name: existing.name,
+      company: existing.company,
+      photoId: existing.photoId,
+      photoUrl,
+      pointsAwarded: 0,
+      isNew: false,
+      leveledUp: false,
+      fromLevel,
+      toLevel: fromLevel,
+      rankBefore,
+      rankAfter: rankBefore,
+      state,
     };
   }
-  const need = next.min - current.min;
-  const inBand = points - current.min;
-  return {
-    current,
-    next,
-    inBand,
-    need,
-    fill: Math.min(1, inBand / need),
-    isMax: false,
+
+  const contact: Contact = {
+    code,
+    name: "",
+    company: "",
+    photoId,
+    capturedAt: now,
+    pointsAwarded: NEW_PERSON_POINTS,
   };
-}
-
-export function scansThisHour(state: GameState, now = Date.now()): number {
-  return state.scanTimestamps.filter((t) => now - t < HOUR_MS).length;
-}
-
-export function cooldownRemaining(state: GameState, now = Date.now()): number {
-  if (state.lastScanAt == null) return 0;
-  return Math.max(0, COOLDOWN_MS - (now - state.lastScanAt));
-}
-
-export function applyScan(state: GameState, type: BadgeType, now = Date.now()): ScanResult {
-  const waitMs = cooldownRemaining(state, now);
-  if (waitMs > 0) {
-    return { ok: false, reason: "cooldown", waitMs };
-  }
-
-  const recent = state.scanTimestamps.filter((t) => now - t < HOUR_MS);
-  if (recent.length >= HOURLY_CAP) {
-    const oldest = recent[0];
-    return { ok: false, reason: "cap", waitMs: Math.max(0, HOUR_MS - (now - oldest)) };
-  }
-
-  const isFirst = !state.collected.includes(type);
-  const pointsAwarded = isFirst ? FIRST_OF_TYPE_POINTS : REPEAT_POINTS;
-  const fromLevel = getLevel(state.points);
   const nextState: GameState = {
     ...state,
-    points: state.points + pointsAwarded,
-    collected: isFirst ? [...state.collected, type] : state.collected,
-    lastScanAt: now,
-    scanTimestamps: [...recent, now],
-    lineIndex: (state.lineIndex + 1) % SCAN_LINES.length,
+    points: state.points + NEW_PERSON_POINTS,
+    collected: [contact, ...state.collected],
   };
-  const toLevel = getLevel(nextState.points);
-
+  const toLevel = getLevel(nextState.collected.length);
   return {
     ok: true,
-    type,
-    pointsAwarded,
-    isFirst,
-    line: SCAN_LINES[state.lineIndex],
-    leveledUp: toLevel.name !== fromLevel.name,
+    code,
+    name: "",
+    company: "",
+    photoId,
+    photoUrl,
+    pointsAwarded: NEW_PERSON_POINTS,
+    isNew: true,
+    leveledUp: toLevel.number !== fromLevel.number,
     fromLevel,
     toLevel,
+    rankBefore,
+    rankAfter,
     state: nextState,
   };
-}
-
-export function formatMs(ms: number): string {
-  const total = Math.max(0, Math.ceil(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }

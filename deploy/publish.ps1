@@ -69,4 +69,12 @@ tar -C $dist -cf - . | & ssh @sshArgs "${User}@${DropletHost}" "tar -C /var/www/
 if ($LASTEXITCODE -ne 0) { throw "dist sync failed" }
 
 Invoke-Remote "chown -R www-data:www-data /var/www/fanta && nginx -t && systemctl reload nginx"
+
+Write-Host "==> Sync contact service"
+Invoke-Remote "mkdir -p /opt/fanta-contact /etc/fanta"
+Copy-ToRemote (Join-Path $RepoRoot "server\contact.mjs") "/opt/fanta-contact/contact.mjs"
+Copy-ToRemote (Join-Path $RepoRoot "server\package.json") "/opt/fanta-contact/package.json"
+Copy-ToRemote (Join-Path $RepoRoot "server\contact.service") "/etc/systemd/system/fanta-contact.service"
+Invoke-Remote "chown -R www-data:www-data /opt/fanta-contact && systemctl daemon-reload && systemctl enable --now fanta-contact && systemctl restart fanta-contact"
+
 Write-Host "==> Live: https://fanta-dmasl26-421419912123poc.ingame.global"

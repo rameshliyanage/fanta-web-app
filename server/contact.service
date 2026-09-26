@@ -1,0 +1,14 @@
+[Unit]
+Description=Fanta contact reader
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/fanta-contact
+ExecStart=/usr/bin/node /opt/fanta-contact/contact.mjs
+EnvironmentFile=/etc/fanta/contact.env
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

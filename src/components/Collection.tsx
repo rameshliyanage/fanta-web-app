@@ -1,62 +1,82 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { BADGES } from "../game/constants";
-import type { BadgeType } from "../game/types";
-import { LockedBadge } from "./BadgeSlot";
+import { createPortal } from "react-dom";
+import type { Contact } from "../game/types";
+import { CardView, usePhotoUrl } from "./CardView";
+
+function CardThumb({
+  contact,
+  fresh,
+  onOpen,
+}: {
+  contact: Contact;
+  fresh: boolean;
+  onOpen: (contact: Contact) => void;
+}) {
+  const url = usePhotoUrl(contact.photoId);
+  return (
+    <button
+      type="button"
+      data-code={contact.code}
+      className={fresh ? "collection-card just-got" : "collection-card"}
+      onClick={() => onOpen(contact)}
+    >
+      <span className="collection-photo">
+        {url ? <img src={url} alt="" draggable={false} /> : <span className="thumb-wait" />}
+      </span>
+      <span className="collection-name">{contact.name || "Add a name"}</span>
+      {contact.company ? <span className="collection-company">{contact.company}</span> : null}
+    </button>
+  );
+}
 
 export function Collection({
   collected,
-  freshId = null,
+  freshCode = null,
+  onSeeAll,
+  onChange,
 }: {
-  collected: BadgeType[];
-  freshId?: BadgeType | null;
+  collected: Contact[];
+  freshCode?: string | null;
+  onSeeAll: () => void;
+  onChange: (code: string, name: string, company: string) => void;
 }) {
+  const [open, setOpen] = useState<Contact | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ pointerId: number; x: number; left: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const newest = collected.slice(0, 12);
 
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const scroller: HTMLDivElement = el;
-
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const box: HTMLDivElement = scroller;
     function onWheel(event: WheelEvent) {
-      if (scroller.scrollWidth <= scroller.clientWidth + 1) return;
-      const delta =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (box.scrollWidth <= box.clientWidth + 1) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
       if (!delta) return;
       event.preventDefault();
-      scroller.scrollLeft += delta;
+      box.scrollLeft += delta;
     }
-
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
   }, []);
 
   useEffect(() => {
-    if (!freshId || !scrollerRef.current) return;
+    if (!freshCode || !scrollerRef.current) return;
     const scroller = scrollerRef.current;
-    const card = scroller.querySelector<HTMLElement>(`[data-badge="${freshId}"]`);
+    const card = scroller.querySelector<HTMLElement>(`[data-code="${freshCode}"]`);
     if (!card) return;
     const left =
-      card.getBoundingClientRect().left -
-      scroller.getBoundingClientRect().left +
-      scroller.scrollLeft;
+      card.getBoundingClientRect().left - scroller.getBoundingClientRect().left + scroller.scrollLeft;
     const target = left - (scroller.clientWidth - card.clientWidth) / 2;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scroller.scrollTo({
-      left: Math.max(0, target),
-      behavior: reduce ? "auto" : "smooth",
-    });
-  }, [freshId]);
+    scroller.scrollTo({ left: Math.max(0, target), behavior: reduce ? "auto" : "smooth" });
+  }, [freshCode]);
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     if (event.pointerType === "touch") return;
     const el = event.currentTarget;
-    dragRef.current = {
-      pointerId: event.pointerId,
-      x: event.clientX,
-      left: el.scrollLeft,
-    };
+    dragRef.current = { pointerId: event.pointerId, x: event.clientX, left: el.scrollLeft };
     el.setPointerCapture(event.pointerId);
     setDragging(true);
   }
@@ -74,42 +94,46 @@ export function Collection({
   }
 
   return (
-    <section className="collection" aria-label="Badge collection">
+    <section className="collection" aria-label="People collected">
       <div className="collection-head">
         <h2>Collection</h2>
-        <span>
-          {collected.length}/{BADGES.length} types
-        </span>
+        {collected.length > 0 ? (
+          <button type="button" className="text-btn" onClick={onSeeAll}>
+            See all
+          </button>
+        ) : (
+          <span>0 people</span>
+        )}
       </div>
-      <div
-        ref={scrollerRef}
-        className={dragging ? "collection-scroller is-dragging" : "collection-scroller"}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
-        <div className="collection-grid">
-          {BADGES.map((badge) => {
-            const got = collected.includes(badge.id);
-            const justGot = got && freshId === badge.id;
-            return (
-              <article
-                key={badge.id}
-                data-badge={badge.id}
-                className={justGot ? "got just-got" : got ? "got" : "locked"}
-              >
-                {got ? (
-                  <img src={badge.image} alt={badge.label} draggable={false} />
-                ) : (
-                  <LockedBadge image={badge.image} />
-                )}
-                <span>{got ? badge.label : "???"}</span>
-              </article>
-            );
-          })}
+      {collected.length === 0 ? (
+        <p className="lede">Your first Fantastic person is out there</p>
+      ) : (
+        <div
+          ref={scrollerRef}
+          className={dragging ? "collection-scroller is-dragging" : "collection-scroller"}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          <div className="collection-grid">
+            {newest.map((contact) => (
+              <CardThumb
+                key={contact.code}
+                contact={contact}
+                fresh={freshCode === contact.code}
+                onOpen={setOpen}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+      {open
+        ? createPortal(
+            <CardView contact={open} onChange={onChange} onClose={() => setOpen(null)} />,
+            document.body,
+          )
+        : null}
     </section>
   );
 }

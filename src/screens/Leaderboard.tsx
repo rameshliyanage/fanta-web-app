@@ -13,14 +13,16 @@ export function Leaderboard({
 
   return (
     <div className="screen board">
-      <button type="button" className="text-btn back" onClick={onBack}>
-        ← Home
-      </button>
-      <h1>Leaderboard</h1>
+      <header className="topbar">
+        <button type="button" className="pill" onClick={onBack}>
+          <span aria-hidden="true">‹</span> Back
+        </button>
+      </header>
+      <h1>LEADERBOARD</h1>
       <p className="lede">
         You’re #{rank} with {state.points} pts · {state.name}
       </p>
-      <p className="fine">This device only until we plug in the live board.</p>
+      <p className="fine">Saved on this phone only.</p>
       <ol className="board-list">
         {rows.length === 0 ? <li className="empty">No scans yet</li> : null}
         {rows.map((row, index) => (

@@ -110,6 +110,12 @@ server {
     gzip on;
     gzip_types text/css application/javascript application/json image/svg+xml;
 
+    location /api/ {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_read_timeout 10s;
+        client_max_body_size 2m;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
@@ -201,7 +207,32 @@ Expect `200` and HTML. Open **https://fanta-dmasl26-421419912123poc.ingame.globa
 
 ---
 
-## 9. What not to do
+## 9. Contact service
+
+Name and company reads go through Node on the droplet, not through the static files. The phone posts two JPEG crops to `POST /api/contact`. nginx proxies `/api/` to `127.0.0.1:8787`.
+
+Install Node 20 on the droplet once (`node` must be at `/usr/bin/node`). Create the key file once. It is not in git:
+
+```bash
+mkdir -p /etc/fanta
+printf 'GEMINI_API_KEY=your-paid-key\n' > /etc/fanta/contact.env
+chmod 600 /etc/fanta/contact.env
+chown www-data:www-data /etc/fanta/contact.env
+```
+
+Use a paid Gemini key. The free tier is marked as used to improve Google’s products. `deploy/publish.ps1` copies `server/contact.mjs` to `/opt/fanta-contact` and restarts `fanta-contact`. Without the key, the service stays up and returns empty name and company. Scans still score from the QR.
+
+Check:
+
+```bash
+curl -s http://127.0.0.1:8787/api/health
+```
+
+Expect `{"ok":true}`.
+
+---
+
+## 10. What not to do
 
 - Do not use Cloudflare **Flexible**. Origin must be HTTPS; **Full (strict)** is required.
 - Do not put `ingameglobal.key` in git.
